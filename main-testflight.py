@@ -1,6 +1,6 @@
 import os
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QFileSystemModel, QDockWidget, QPushButton, QWidget, QVBoxLayout, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QFileSystemModel, QDockWidget, QPushButton, QWidget, QVBoxLayout, QMessageBox, QFileDialog
 
 
 class FileManager(QMainWindow):
@@ -25,6 +25,10 @@ class FileManager(QMainWindow):
         self.dock.setWidget(self.file_operations_widget)
 
         self.init_file_operations()
+
+        self.select_disk_button = QPushButton("Select Disk", self)
+        self.select_disk_button.clicked.connect(self.show_disk_selection_dialog)
+        self.statusBar().addWidget(self.select_disk_button)
 
     def init_file_operations(self):
         layout = QVBoxLayout()
@@ -60,9 +64,21 @@ class FileManager(QMainWindow):
         if os.path.isfile(file_path):
             os.startfile(file_path)
 
+    def change_disk(self, disk_path):
+        self.tree_view.setRootIndex(self.model.index(disk_path))
+
+    def show_disk_selection_dialog(self):
+        selected_disk = QFileDialog.getExistingDirectory(self, "Select Disk")
+        if selected_disk:
+            self.change_disk(selected_disk)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     file_manager = FileManager()
     file_manager.show()
+
+    # Optional: Show a disk selection dialog at startup
+    # file_manager.show_disk_selection_dialog()
+
     sys.exit(app.exec_())
