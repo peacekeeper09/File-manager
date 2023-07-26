@@ -1,6 +1,6 @@
 import os
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QFileSystemModel, QDockWidget, QPushButton, QWidget, QVBoxLayout, QMessageBox, QFileDialog, QLineEdit, QInputDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTreeView, QFileSystemModel, QDockWidget, QPushButton, QWidget, QVBoxLayout, QMessageBox, QFileDialog, QLineEdit, QInputDialog, QAction, QMenu, QToolBar, QListView
 
 
 class FileManager(QMainWindow):
@@ -9,12 +9,20 @@ class FileManager(QMainWindow):
         self.setWindowTitle("File Manager")
         self.setGeometry(100, 100, 800, 600)
 
+        self.file_system_model = QFileSystemModel()
+        self.file_system_model.setRootPath("")
+        self.current_path = os.path.expanduser("~")
+
         self.tree_view = QTreeView(self)
-        self.model = QFileSystemModel()
-        self.model.setRootPath("")
-        self.tree_view.setModel(self.model)
-        self.tree_view.setRootIndex(self.model.index(os.path.expanduser("~")))
+        self.tree_view.setModel(self.file_system_model)
+        self.tree_view.setRootIndex(self.file_system_model.index(self.current_path))
         self.tree_view.doubleClicked.connect(self.open_file)
+
+        self.icon_view = QListView(self)
+        self.icon_view.setViewMode(QListView.IconMode)
+        self.icon_view.setModel(self.file_system_model)
+        self.icon_view.setRootIndex(self.file_system_model.index(self.current_path))
+        self.icon_view.doubleClicked.connect(self.open_file)
 
         self.setCentralWidget(self.tree_view)
 
@@ -30,10 +38,59 @@ class FileManager(QMainWindow):
         self.select_disk_button.clicked.connect(self.show_disk_selection_dialog)
         self.statusBar().addWidget(self.select_disk_button)
 
+        self.create_menu_bar_and_toolbar()
+
+    def create_menu_bar_and_toolbar(self):
+        # File Menu
+        file_menu = self.menuBar().addMenu("File")
+
+        open_action = QAction("Open", self)
+        open_action.triggered.connect(self.open_selected_file)
+        file_menu.addAction(open_action)
+
+        delete_action = QAction("Delete", self)
+        delete_action.triggered.connect(self.delete_selected_file)
+        file_menu.addAction(delete_action)
+
+        rename_action = QAction("Rename", self)
+        rename_action.triggered.connect(self.rename_selected_file)
+        file_menu.addAction(rename_action)
+
+        create_folder_action = QAction("Create Folder", self)
+        create_folder_action.triggered.connect(self.create_folder)
+        file_menu.addAction(create_folder_action)
+
+        file_menu.addSeparator()
+
+        properties_action = QAction("File Properties", self)
+        properties_action.triggered.connect(self.show_file_properties)
+        file_menu.addAction(properties_action)
+
+        # View Menu
+        view_menu = self.menuBar().addMenu("View")
+
+        tree_view_action = QAction("Tree View", self)
+        tree_view_action.triggered.connect(self.show_tree_view)
+        view_menu.addAction(tree_view_action)
+
+        icon_view_action = QAction("Icon View", self)
+        icon_view_action.triggered.connect(self.show_icon_view)
+        view_menu.addAction(icon_view_action)
+
+        # Toolbar
+        toolbar = QToolBar("Toolbar", self)
+        self.addToolBar(toolbar)
+
+        toolbar.addAction(open_action)
+        toolbar.addAction(delete_action)
+        toolbar.addAction(rename_action)
+        toolbar.addAction(create_folder_action)
+
     def init_file_operations(self):
         layout = QVBoxLayout()
         self.file_operations_widget.setLayout(layout)
 
+        # Buttons for common file operations (same as menu actions)
         open_button = QPushButton("Open", self.file_operations_widget)
         open_button.clicked.connect(self.open_selected_file)
         layout.addWidget(open_button)
@@ -56,24 +113,34 @@ class FileManager(QMainWindow):
 
     def open_selected_file(self):
         selected_index = self.tree_view.selectedIndexes()[0]
-        file_path = self.model.filePath(selected_index)
+        file_path = self.file_system_model.filePath(selected_index)
         if os.path.isfile(file_path):
             os.startfile(file_path)
 
     def delete_selected_file(self):
-        selected_index = self.tree_view.selectedIndexes()[0]
-        file_path = self.model.filePath(selected_index)
+        selected_indexes = self.tree_view.selectedIndexes()
+        if not selected_indexes:
+            return
+
+        selected_index = selected_indexes[0]
+        file_path = self.file_system_model.filePath(selected_index)
+
         if os.path.isfile(file_path):
             confirmation = QMessageBox.question(self, "Confirm Deletion",
                                                 f"Are you sure you want to delete {file_path}?",
                                                 QMessageBox.Yes | QMessageBox.No)
             if confirmation == QMessageBox.Yes:
                 os.remove(file_path)
-                self.model.remove(file_path)
+                self.file_system_model.remove(selected_index)
 
     def rename_selected_file(self):
-        selected_index = self.tree_view.selectedIndexes()[0]
-        file_path = self.model.filePath(selected_index)
+        selected_indexes = self.tree_view.selectedIndexes()
+        if not selected_indexes:
+            return
+
+        selected_index = selected_indexes[0]
+        file_path = self.file_system_model.filePath(selected_index)
+
         if not os.path.exists(file_path):
             return
 
@@ -82,13 +149,18 @@ class FileManager(QMainWindow):
             new_path = os.path.join(os.path.dirname(file_path), new_name)
             try:
                 os.rename(file_path, new_path)
-                self.model.rename(selected_index, new_path)
+                self.file_system_model.rename(selected_index, new_path)
             except OSError as e:
                 QMessageBox.warning(self, "Error", str(e))
 
     def create_folder(self):
-        selected_index = self.tree_view.selectedIndexes()[0]
-        directory_path = self.model.filePath(selected_index)
+        selected_indexes = self.tree_view.selectedIndexes()
+        if not selected_indexes:
+            return
+
+        selected_index = selected_indexes[0]
+        directory_path = self.file_system_model.filePath(selected_index)
+
         if not os.path.isdir(directory_path):
             return
 
@@ -97,13 +169,18 @@ class FileManager(QMainWindow):
             folder_path = os.path.join(directory_path, folder_name)
             try:
                 os.mkdir(folder_path)
-                self.model.mkdir(selected_index, folder_name)
+                self.file_system_model.mkdir(selected_index, folder_name)
             except OSError as e:
                 QMessageBox.warning(self, "Error", str(e))
 
     def show_file_properties(self):
-        selected_index = self.tree_view.selectedIndexes()[0]
-        file_path = self.model.filePath(selected_index)
+        selected_indexes = self.tree_view.selectedIndexes()
+        if not selected_indexes:
+            return
+
+        selected_index = selected_indexes[0]
+        file_path = self.file_system_model.filePath(selected_index)
+
         if not os.path.exists(file_path):
             return
 
@@ -115,25 +192,30 @@ class FileManager(QMainWindow):
         QMessageBox.information(self, "File Properties", file_properties)
 
     def open_file(self, index):
-        file_path = self.model.filePath(index)
+        file_path = self.file_system_model.filePath(index)
         if os.path.isfile(file_path):
             os.startfile(file_path)
 
     def change_disk(self, disk_path):
-        self.tree_view.setRootIndex(self.model.index(disk_path))
+        self.current_path = disk_path
+        self.tree_view.setRootIndex(self.file_system_model.index(self.current_path))
+        self.icon_view.setRootIndex(self.file_system_model.index(self.current_path))
 
     def show_disk_selection_dialog(self):
         selected_disk = QFileDialog.getExistingDirectory(self, "Select Disk")
         if selected_disk:
             self.change_disk(selected_disk)
 
+    def show_tree_view(self):
+        self.setCentralWidget(self.tree_view)
+
+    def show_icon_view(self):
+        self.setCentralWidget(self.icon_view)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     file_manager = FileManager()
     file_manager.show()
-
-    # Optional: Show a disk selection dialog at startup
-    # file_manager.show_disk_selection_dialog()
 
     sys.exit(app.exec_())
